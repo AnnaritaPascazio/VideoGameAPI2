@@ -1,90 +1,90 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using System.Diagnostics;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using VideoGameAPI2.Data;
 
 namespace VideoGameAPI2.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [DebuggerDisplay($"{{{nameof(VideoGame)}(),nq}}")]
     public class VideoGameController : ControllerBase
     {
-        static private List<VideoGame> videoGames = new List<VideoGame>
-        {
-            new VideoGame
-            {
-                Id= 1,
-                Title = "Spider-Man 2",
-                Platform = "PS5",
-                Developer = "Insomniac Games",
-                Publisher = "Sony Interactive Entertainment"
-            },
-            new VideoGame
-            {
-                Id = 2,
-                Title = "The legend of Zelda: Breath of the Wild",
-                Platform = "Nintendo Switch",
-                Developer = "Nintendo EPD",
-                Publisher = "Nintendo"
-            },
-            new VideoGame
-            {
-                Id=3,
-                Title="Cyberpunk 2077",
-                Platform="PC",
-                Developer="CD projekt Red",
-                Publisher="CD Projekt"
-            }
-        };
-        /* we can return a status code with an action result*/
-        [HttpGet]
-        public ActionResult<List<VideoGame>> GetVideoGames()
-        {
-            return Ok(videoGames);
+        private readonly VideoGameDbContext _context;
 
-        }
-        [HttpGet("{id}")]
-        public ActionResult<VideoGame> GetVideoGameById(int id)
+        public VideoGameController(VideoGameDbContext context)
         {
-            var game = videoGames.FirstOrDefault(g => g.Id == id); // this is a lambda expression : (g => g.Id == id)
-            if (game is null)
+            _context = context;
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<List<VideoGame>>> GetVideoGames()
+        {
+            return Ok(await _context.VideoGames.ToListAsync());
+        }
+
+        [HttpGet("{id}")]
+        public async Task<ActionResult<VideoGame>> GetVideoGameById(int id)
+        {
+            var game = await _context.VideoGames.FindAsync(id);
+            if (game == null)
                 return NotFound();
 
             return Ok(game);
         }
+
         [HttpPost]
-        public ActionResult<VideoGame> AddVideoGame(VideoGame newGame)
+        public async Task<ActionResult<VideoGame>> AddVideoGame(VideoGame newGame)
         {
-            if (newGame is null)
+            if (newGame == null)
                 return BadRequest();
 
-            newGame.Id = videoGames.Max(g => g.Id) + 1;
-            videoGames.Add(newGame);
+            // Rimuoviamo l'impostazione manuale dell'ID
+            _context.VideoGames.Add(newGame);
+            await _context.SaveChangesAsync();
+
             return CreatedAtAction(nameof(GetVideoGameById), new { id = newGame.Id }, newGame);
         }
-        [HttpPut("{id}")] // I => Interface 
-        public IActionResult UpdateVideoGame(int id,VideoGame updatesGame)
-        {
-            var game = videoGames.FirstOrDefault(g => g.Id == id);
-            if (game is null)
-                return NotFound();
 
-            game.Title = updatesGame.Title;
-            game.Platform = updatesGame.Platform;
-            game.Developer = updatesGame.Developer;
-            game.Publisher = updatesGame.Publisher;
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateVideoGame(int id, VideoGame updatedGame)
+        {
+            if (id != updatedGame.Id)
+                return BadRequest("L'ID della richiesta non corrisponde.");
+
+            _context.Entry(updatedGame).State = EntityState.Modified;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!VideoGameExists(id))
+                    return NotFound();
+
+                throw;
+            }
 
             return NoContent();
         }
+
         [HttpDelete("{id}")]
-        public IActionResult DeleteVideoGame(int id)
+        public async Task<IActionResult> DeleteVideoGame(int id)
         {
-            var game = videoGames.FirstOrDefault(g => g.Id == id);
-            if (game is null)
+            var game = await _context.VideoGames.FindAsync(id);
+            if (game == null)
                 return NotFound();
 
-            videoGames.Remove(game);
+            _context.VideoGames.Remove(game);
+            await _context.SaveChangesAsync();
+
             return NoContent();
+        }
+
+        private bool VideoGameExists(int id)
+        {
+            return _context.VideoGames.Any(e => e.Id == id);
         }
     }
 }
